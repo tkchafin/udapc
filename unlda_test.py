@@ -21,15 +21,23 @@ from scipy.linalg import eigh
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score, silhouette_score
 
 
-def generate_synthetic_data(n_samples=1000, n_clusters=4, n_features=50, random_state=None):
-	# Generate synthetic data with `n_clusters` clusters
-	data, labels = make_blobs(n_samples=n_samples, centers=n_clusters, n_features=n_features, random_state=random_state)
-
-	# Standardize the features
-	scaler = StandardScaler()
-	data = scaler.fit_transform(data)
-
-	return data, labels
+def generate_synthetic_data(n_samples=1000, n_clusters=4, n_features=50, random_state=None, dispersion=1):
+    # Define the minimum and maximum standard deviation for the clusters
+    min_std = 0.1
+    max_std = 1
+    
+    # Calculate the standard deviation for the clusters based on the dispersion parameter
+    cluster_std = min_std + (max_std - min_std) * dispersion
+    
+    # Generate synthetic data with `n_clusters` clusters
+    data, labels = make_blobs(n_samples=n_samples, centers=n_clusters, n_features=n_features, 
+                              random_state=random_state, cluster_std=cluster_std)
+    
+    # Standardize the features
+    scaler = StandardScaler()
+    data = scaler.fit_transform(data)
+    
+    return data, labels
 
 def gevd(A, B):
 	eigvals, eigvecs = eigh(A, B)
@@ -76,8 +84,8 @@ def un_rtlda(X, c, Ninit=10, gamma=1e-6, tol=1e-6, max_iter=100, Ntry=10, center
 	#print("W:",W.shape)
 
 	# Iterate until convergence or maxIter is reached
-	while not np.isclose(obj_old, obj_new, atol=tol) and it < max_iter or it==0:
-		
+	while (not np.isclose(obj_old, obj_new, atol=tol) or it == 0) and it < max_iter:
+
 		it += 1
 		obj_old = obj_new
 
@@ -187,10 +195,19 @@ n_clusters = 4
 n_features = 500
 random_state = 42
 
-data, labels = generate_synthetic_data(n_samples=n_samples, n_clusters=n_clusters, n_features=n_features, random_state=random_state)
+data, labels = generate_synthetic_data(n_samples=n_samples, 
+				       n_clusters=n_clusters,
+					    n_features=n_features, 
+						random_state=random_state,
+						dispersion=100.0)
 
 # Apply Un-RTLDA and obtain the reduced-dimensional representation and cluster assignments
-T, G, W = un_rtlda(data, n_clusters, Ninit=10, max_iter=20, Ntry=50, center=True)
+T, G, W = un_rtlda(data, 
+		   n_clusters, 
+		   Ninit=10, 
+		   max_iter=20, 
+		   Ntry=50, 
+		   center=True)
 
 # Compute clustering performance metrics
 ari = adjusted_rand_score(labels, G)
