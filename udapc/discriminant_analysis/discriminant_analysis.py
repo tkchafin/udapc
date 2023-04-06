@@ -312,17 +312,3 @@ class DiscriminantAnalysis(DimReduction):
 			
 			self.coords = [coords_all]
 			return(coords_all)
-		
-		else:
-			print(
-				"Unsupervised DAPC Settings:\n"
-					"\tsolver: "+str(self.solver)+"\n"
-					"\tnumber PCs: "+str(self.n_pca)+"\n"
-					"\tmaxk: "+str(self.maxk)+"\n"
-					"\treps: "+str(self.reps)+"\n"
-					"\trandom_state: "+str(self.random_state)+"\n"
-			)
-			#1) For K=2, do fixed K-means clustering on the PC embeddings 
-			# 	Optional - Try for N reps and find 'best' ? 
-			#2) Evaluate replicates by splitting test-train and calculating RMSE
-			#3) Run each successive K with the K-1 DA embeddings (go back to step 2) 
