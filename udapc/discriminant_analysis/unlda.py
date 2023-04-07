@@ -114,13 +114,7 @@ def un_rtlda(X, c, Ninit=10, gamma=1e-6, tol=1e-6, max_iter=100, Ntry=10, center
         H = np.eye(n)
 
     St = X.T @ H @ X  # Compute the within-class scatter matrix St
-
-    print("X:",X.shape)
-    # print("H:",H.shape)
-    # print("St:",St.shape)
-
     Stt = St + gamma * np.eye(d)  # Add regularization term to St
-    #print("Stt:",Stt.shape)
 
     it = 0  # Initialize the iteration counter
     
@@ -141,32 +135,17 @@ def un_rtlda(X, c, Ninit=10, gamma=1e-6, tol=1e-6, max_iter=100, Ntry=10, center
         W = pca.fit_transform(X.T @ H)
     W2 = W  # Initialize W2 with W
 
-    #print("W:",W.shape)
-
     obj_log = []
 
     # Iterate until convergence or maxIter is reached
     while (not np.isclose(obj_old, obj_new, atol=tol) or it == 0) and it < max_iter:
-    #while (obj_new - obj_old) > tol and it < max_iter:
-    #while it < max_iter:
 
         it += 1
         obj_old = obj_new
 
-        # print("W2:",W.shape)
-        # print("W2.T:",W.T.shape)
-        # print("Stt:",Stt.shape)
-        # print("X:",X.shape)
-        # print("X.T:",X.T.shape)
-        # print("H:",H.shape)
-        # print("H.T:",H.T.shape)
         # Calculate the intermediate matrix product
         T = (scipy.linalg.expm(-0.5 * np.linalg.inv(W2.T @ Stt @ W2)) @ W2.T @ X.T @ H).T
         #T = (fractional_matrix_power(W2.T @ Stt @ W2, -0.5) @ W2.T @ X.T @ H).T
-
-        # Check the dimensions of M
-        #print("T.shape:", T.shape)  # Should output (2, 100)
-        #print(T)
 
         best_obj_tmp = float('inf')
         best_Ypre = None
@@ -187,8 +166,6 @@ def un_rtlda(X, c, Ninit=10, gamma=1e-6, tol=1e-6, max_iter=100, Ntry=10, center
 
         # Compute the between-class scatter matrix Sb
         Sb = X.T @ H @ Yp @ np.linalg.inv(Yp.T @ Yp) @ Yp.T @ H.T @ X
-        #print("Sb:",Sb.shape)
-
 
         # Perform generalized eigenvalue decomposition and update W2
         eigvals, eigvecs = eigh(Sb, Stt)
@@ -197,7 +174,6 @@ def un_rtlda(X, c, Ninit=10, gamma=1e-6, tol=1e-6, max_iter=100, Ntry=10, center
         # Update the new objective value
         obj_new = np.trace((W2.T @ Stt @ W2) ** -1 @ W2.T @ Sb @ W2)
 
-        print(obj_new)
         obj_log.append(obj_new)
 
     # Print a warning if the algorithm did not converge within maxIter iterations
