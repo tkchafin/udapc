@@ -21,12 +21,13 @@ data, labels = unlda.generate_synthetic_data(n_samples=n_samples,
 						dispersion=55.0)
 
 # Apply Un-RTLDA and obtain the reduced-dimensional representation and cluster assignments
-T, G, W = unlda.un_rtlda(data, 
+T, G, W, obj = unlda.un_rtlda(data, 
 		   n_clusters, 
 		   Ninit=10, 
 		   max_iter=20, 
 		   Ntry=10, 
-		   center=True)
+		   center=True,
+           gamma=0.001)
 
 # Compute clustering performance metrics
 unlda.print_metrics(T, labels, G)
