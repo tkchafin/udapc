@@ -11,11 +11,15 @@ if sys.version_info < (3, 6):
 import numpy as np
 import pandas as pd
 import random
+
+import seaborn as sns
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import adjusted_rand_score, silhouette_score, calinski_harabasz_score, davies_bouldin_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import accuracy_score
@@ -418,7 +422,8 @@ class UnsupervisedDiscriminantAnalysis(DimReduction):
         self.n_pca_iter = n_pca_iter
         self.n_pca_max = n_pca_max
         self.n_pca = n_pca
-
+        
+        self.run_xval = run_xval
         self.subset = subset
 
         # To store results
@@ -426,6 +431,8 @@ class UnsupervisedDiscriminantAnalysis(DimReduction):
         self.models = list()
         self.pred_labels = list()
         self.X = None
+        self.results = None
+        self.metrics = None 
 
         # Get attributes from already instantiated embedding
         #self.coords = embedding.coords
@@ -461,7 +468,7 @@ class UnsupervisedDiscriminantAnalysis(DimReduction):
             k_reps = self.fixedk
         else:
             #k_reps = range(2, self.maxk)
-            k_reps = range(2, self.maxk)
+            k_reps = range(2, self.maxk+1)
 
         print(
             "Unsupervised DAPC Settings:\n"
@@ -482,42 +489,143 @@ class UnsupervisedDiscriminantAnalysis(DimReduction):
             labels = None 
         #test_size = 1.0-self.training_set
         
-        print("\nRunning optimization...\n")
-        results = dict()
-    
+        n_samples = self.embedding.coords[0].shape[0]
+        subset_samples = int(n_samples * self.subset)
+
+        self.results = dict()
+        results_df = pd.DataFrame(columns=['Rep', 'K', 'n_PCs', 'DB_test', 'DB_train', 'DB_all'])
+
+        # Iterate through the replicates
         for rep in progressbar(range(self.reps), desc="Replicates: ", leave=True, position=0):
-            print(self.subset)
-            if self.subset < 1.0:
-                _subset = [random.sample(samp, subset_samples) for samp in self.embedding.coords[0]]
+            if self.run_xval:
+                # Split the dataset into training and test sets
+                X_train, X_test, train_indices, test_indices = train_test_split(self.embedding.coords[0], np.arange(self.embedding.coords[0].shape[0]), test_size=self.subset)
             else:
-                _subset = self.embedding.coords[0].copy()
+                X_train = self.embedding.coords[0]
+                X_test = self.embedding.coords[0]
+                train_indices = np.arange(self.embedding.coords[0].shape[0])
+                test_indices = np.arange(self.embedding.coords[0].shape[0])
 
-            results[rep] = dict()
-            print(rep)
+            self.results[rep] = dict()
             for k in progressbar(k_reps, desc="K values: ", leave=False, position=1):
-                objective_values = []
-                print(k)
-                print(_subset)
+                self.results[rep][k] = dict()
                 for p in progressbar(pca_reps, desc="PC dimensions: ", leave=False, position=2):
-                    _X = np.array([samp[0:p] for samp in _subset])
-                    # Apply Un-RTLDA and obtain the reduced-dimensional representation and cluster assignments
-                    print(rep, k, p)
-                    T, G, W, obj = unlda.un_rtlda(_X, 
-                            k, 
-                            Ninit=self.n_init, 
-                            max_iter=self.max_iter, 
-                            Ntry=self.n_try, 
-                            center=self.center, 
-                            gamma=self.gamma, 
-                            tol=self.tol,
-                            no_pca=True)
-                    silhouette = silhouette_score(T, G)
-                    print(str(len(obj)), silhouette)
-                    # Compute clustering performance metrics
-                    #unlda.print_metrics(T, labels, G)
+                    _X_train = np.array([samp[0:p] for samp in X_train])
+                    _X_test = np.array([samp[0:p] for samp in X_test])
 
-                    # Call plot_embeddings on simulated data
-                    #unlda.plot_embeddings(T, G, W, _X, labels, k)
+                    # Fit the Un-RTLDA model on the training set
+                    _clf = unlda.UnRTLDA(c=k,
+                                        Ninit=self.n_init,
+                                        max_iter=self.max_iter,
+                                        Ntry=self.n_try,
+                                        center=self.center,
+                                        gamma=self.gamma,
+                                        tol=self.tol,
+                                        no_pca=True)
+                    T_train, G_train = _clf.fit(_X_train)
+
+                    # Transform the test set
+                    T_test = _clf.transform(_X_test)
+                    G_test = _clf.predict(_X_test)
+
+                    #CH_index = calinski_harabasz_score(T_test, G_test)
+                    if len(np.unique(G_test)) < 2:
+                        DB_test = np.nan
+                    else:
+                        DB_test = davies_bouldin_score(T_test, G_test)
                     
-                    #sys.exit()
-        sys.exit()
+
+                    if self.run_xval:
+                        DB_train = davies_bouldin_score(T_train, G_train)
+                        # Concatenate train and test sets
+                        T_all = np.concatenate((T_train, T_test), axis=0)
+                        G_all = np.concatenate((G_train, G_test), axis=0)
+
+                        # Calculate DB index for the combined train and test set
+                        DB_all = davies_bouldin_score(T_all, G_all)
+                    else:
+                        DB_train = DB_test
+                        DB_all = DB_test
+
+                        # Store the results
+                        self.results[rep][k][p] = {
+                            'T_test': T_test,
+                            'G_test': G_test,
+                            'T_train' : T_train,
+                            'G_train' : G_train,
+                            'train_indices': train_indices,
+                            'test_indices': test_indices
+                        }
+                    new_row = pd.DataFrame({
+                        'Rep': [rep],
+                        'K': [k],
+                        'n_PCs': [p],
+                        'DB_test': [DB_test],
+                        'DB_train': [DB_train],
+                        'DB_all': [DB_all]
+                    })
+
+                    results_df = pd.concat([results_df, new_row], ignore_index=True)
+        self.metrics = results_df
+    
+    def plot_embeddings(self, filenames=("pca_plots.pdf", "un_rtlda_plots.pdf"), no_pca=False):
+        plot_data = []
+        # Fetch X from self.embedding.coords[0]
+        X = self.embedding.coords[0][:, :2]
+        for rep, rep_results in self.results.items():
+            for k, k_results in rep_results.items():
+                for p, pc_results in k_results.items():
+                    T_train, G_train = pc_results['T_train'], pc_results['G_train']
+                    T_test, G_test = pc_results['T_test'], pc_results['G_test']
+                    T_all = np.vstack((T_train, T_test))
+                    G_all = np.hstack((G_train, G_test))
+                    train_indices = self.results[rep][k][p]['train_indices']
+                    test_indices = self.results[rep][k][p]['test_indices']
+                    if self.pops:
+                        labels_train = self.pops[train_indices]
+                        labels_test = self.pops[test_indices]
+                    else:
+                        labels_train = None
+                        labels_test = None
+
+                # The rest of the code rema
+
+                    for T, G, dataset_type in zip([T_train, T_test, T_all], [G_train, G_test, G_all], ['train', 'test', 'all']):
+                        df = pd.DataFrame(X, columns=[f"PC{i+1}" for i in range(X.shape[1])])
+                        df["Cluster"] = G
+                        df["Original_Population"] = self.labels
+                        df["Dataset"] = dataset_type
+                        df["Rep"] = rep
+                        df["K"] = k
+                        df["n_PCs"] = p
+                        plot_data.append(df)
+
+                        df2 = pd.DataFrame(T, columns=[f"DA{i+1}" for i in range(T.shape[1])])
+                        df2["Cluster"] = G
+                        df2["Original_Population"] = self.labels
+                        df2["Dataset"] = dataset_type
+                        df2["Rep"] = rep
+                        df2["K"] = k
+                        df2["n_PCs"] = p
+                        plot_data.append(df2)
+
+        pca_plots_df = pd.concat(plot_data[0::2], ignore_index=True)
+        un_rtlda_plots_df = pd.concat(plot_data[1::2], ignore_index=True)
+
+        for filename, plot_df, x_col, y_col, title_prefix in zip(
+                filenames,
+                [pca_plots_df, un_rtlda_plots_df],
+                ["PC1", "DA1"],
+                ["PC2", "DA2"],
+                ["Un-RTLDA.v2 Clusters on PCA Embeddings", "Un-RTLDA.v2 Embeddings"]
+            ):
+            with PdfPages(filename) as pdf:
+                for rep_num in range(self.n_reps):
+                    for n_pc in sorted(plot_df["n_PCs"].unique()):
+                        for k in sorted(plot_df["K"].unique()):
+                            plt.figure()
+                            subset_df = plot_df[(plot_df["Rep"] == rep_num) & (plot_df["n_PCs"] == n_pc) & (plot_df["K"] == k)]
+                            sns.scatterplot(data=subset_df, x=x_col, y=y_col, hue="Cluster", style="Original_Population", col="Dataset", palette="deep")
+                            plt.title(f"{title_prefix} - Rep: {rep_num} - n_PCs: {n_pc} - K: {k}")
+                            pdf.savefig()
+                            plt.close()

@@ -67,15 +67,19 @@ def main():
     udapc = UnsupervisedDiscriminantAnalysis(
         embedding = pca, 
         pops = data.pops,
-        n_pca_min=10,
+        n_pca_min=20,
         n_pca_max=160,
         n_pca_iter=20,
-        reps = 20, 
+        reps = 10, 
         n_init = 20, 
-        n_try = 50, 
+        n_try = 20, 
         max_iter = 1000, 
-        maxk = 8
+        subset=0.6,
+        run_xval=True,
+        maxk = 5,
+        gamma=0.001
     )
+    udapc.plot_embeddings()
     
 
 
