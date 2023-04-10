@@ -21,6 +21,13 @@ from sklearn.cluster import KMeans
 from scipy.linalg import eigh
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score, silhouette_score
 
+def get_centroids(D,I_m): # D: data matrix, I_m: indicator matrix 
+    #assert(np.shape(D)[0] == np.shape(I_m)[0])
+    centroids = []
+    for c in range(np.shape(I_m)[1]): # perform for each class
+        column=np.array(I_m[:,c], dtype=bool) # select observations in D who are from that class 
+        centroids.append(np.average(D[column],axis=0)) # calculate the centroid from that class, add it in the list
+    return np.stack(centroids, axis=0)
 
 def generate_synthetic_data(n_samples=1000, n_clusters=4, n_features=50, random_state=None, dispersion=1):
     """
@@ -86,7 +93,7 @@ def is_positive_definite(matrix):
         return False
 
 # Define the Un-RTLDA function
-def un_rtlda(X, c, Ninit=10, gamma=1e-6, tol=1e-6, max_iter=100, Ntry=10, center=True, no_pca=False):
+def un_rtlda_V1(X, c, Ninit=10, gamma=1e-6, tol=1e-6, max_iter=100, Ntry=10, center=True, no_pca=False):
     """
     Implement the Un-Regularized Two-Level Discriminant Analysis (Un-RTLDA) algorithm for clustering.
 
@@ -137,30 +144,24 @@ def un_rtlda(X, c, Ninit=10, gamma=1e-6, tol=1e-6, max_iter=100, Ntry=10, center
 
     obj_log = []
 
+    # create G0, an indicator matrix
+    Yp = np.eye(c)[np.random.randint(c, size=n)] # workaround to create indicator matrix
+
     # Iterate until convergence or maxIter is reached
     while (not np.isclose(obj_old, obj_new, atol=tol) or it == 0) and it < max_iter:
 
-        it += 1
+        it += 1 
         obj_old = obj_new
+        Yp_old = Yp
 
         # Calculate the intermediate matrix product
         T = (scipy.linalg.expm(-0.5 * np.linalg.inv(W2.T @ Stt @ W2)) @ W2.T @ X.T @ H).T
         #T = (fractional_matrix_power(W2.T @ Stt @ W2, -0.5) @ W2.T @ X.T @ H).T
 
-        best_obj_tmp = float('inf')
-        best_Ypre = None
-
-        # Loop through Ntry times to find the best clustering
-        for j in range(Ntry+1):
-            kmeans = KMeans(n_clusters=c, tol=tol, max_iter=max_iter, n_init=Ninit)  # Initialize KMeans clustering
-            Ypre_temp = kmeans.fit_predict(T)  # Cluster the data and obtain labels
-            obj_tmp = kmeans.inertia_  # Store the within-cluster sum of squares
-            # Update Ypre if the new clustering is better than the previous one
-            if obj_tmp < best_obj_tmp:
-                best_obj_tmp = obj_tmp
-                best_Ypre = Ypre_temp
-        Ypre = best_Ypre
-    
+        # Using kmeans with Previous solution as initial clusters
+        kmeans = KMeans(n_clusters=c, init=get_centroids(I_m=Yp_old,D=T))  
+        Ypre= kmeans.fit_predict(T)
+            
         # Update Yp matrix
         Yp = np.eye(c)[Ypre]
 
@@ -175,6 +176,8 @@ def un_rtlda(X, c, Ninit=10, gamma=1e-6, tol=1e-6, max_iter=100, Ntry=10, center
         obj_new = np.trace((W2.T @ Stt @ W2) ** -1 @ W2.T @ Sb @ W2)
 
         obj_log.append(obj_new)
+        print(it)
+        print(obj_new)
 
     # Print a warning if the algorithm did not converge within maxIter iterations
     if it == max_iter:

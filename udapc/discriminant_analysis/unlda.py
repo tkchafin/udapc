@@ -151,7 +151,7 @@ def un_rtlda(X, c, Ninit=10, gamma=1e-6, tol=1e-6, max_iter=100, Ntry=10, center
         best_Ypre = None
 
         # Loop through Ntry times to find the best clustering
-        for j in range(Ntry+1):
+        for j in range(Ntry):
             kmeans = KMeans(n_clusters=c, tol=tol, max_iter=max_iter, n_init=Ninit)  # Initialize KMeans clustering
             Ypre_temp = kmeans.fit_predict(T)  # Cluster the data and obtain labels
             obj_tmp = kmeans.inertia_  # Store the within-cluster sum of squares
