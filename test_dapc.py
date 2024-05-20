@@ -80,6 +80,7 @@ def main():
         gamma=0.001
     )
     udapc.plot_embeddings()
+    print(udapc.metrics)
     
 
 
