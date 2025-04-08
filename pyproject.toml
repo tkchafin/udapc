@@ -1,0 +1,32 @@
+[project]
+name = "udapc"
+version = "0.1.0"
+description = "Command-line interface for unsupervised discriminant analysis of principal components"
+authors = [
+    { name = "Your Name", email = "your.email@example.com" }
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.9"
+
+dependencies = [
+    "click",
+    "snpio",
+    "scikit-learn",
+    "pandas",
+    "seaborn",
+    "matplotlib",
+    "numpy",
+    "scipy"
+]
+
+[project.scripts]
+udapc = "udapc.cli:cli"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+packages = ["udapc"]
